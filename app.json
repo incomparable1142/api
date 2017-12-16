@@ -1,0 +1,13 @@
+{
+  "name": "API Heroku App",
+  "description": "API Heroku App",
+  "keywords": [
+    "API",
+    "python",
+    "sample"
+  ],
+  "repository": "https://github.com/incomparable/api.git",
+  "addons": [
+    "heroku-mongodb"
+  ]
+}
