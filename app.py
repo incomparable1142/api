@@ -295,6 +295,61 @@ def get_info():
 
 #################################################
 #                                               #
+#                  search user                  #
+#                                               #
+#################################################
+@app.route("/seach_user", methods=['POST'])
+def search_user():
+    try:
+        ret = {}
+        ret = {"error": 0}
+        text = request.form['email']
+        mdb.search_user(text)
+        return "%s" % mdb.search_user(text)
+    except Exception as exp:
+        print "todo_done() :: Got exception: %s" % exp
+        print(traceback.format_exc())
+    return json.dumps(ret)
+
+
+#################################################
+#                                               #
+#                     forgot                    #
+#                                               #
+#################################################
+@app.route("/forgot", methods=['POST'])
+def search_user():
+    try:
+        ret = {}
+        email = request.form['email']
+        question = request.form['question']
+        answer = request.form['answer']
+        password = request.form['newpassword']
+
+        # password bcrypt  #
+        pw_hash = bcrypt.generate_password_hash(password)
+        passw = bcrypt.check_password_hash(pw_hash, password)
+
+        if mdb.user_exists(email):
+            ques = mdb.get.security_question(email)
+            if question == ques:
+                ans = mdb.get_security_answer(email)
+                if answer == ans:
+                    mdb.set_password(email, pw_hash)
+                    return 'Done!'
+                else:
+                    return 'Answer is wrong!'
+            else:
+                return 'Question is wrong!'
+
+    except Exception as exp:
+        print "todo_done() :: Got exception: %s" % exp
+        print(traceback.format_exc())
+    return json.dumps(ret)
+
+
+#################################################
+#                                               #
 #                    ADD_TODO                   #
 #                                               #
 #################################################
