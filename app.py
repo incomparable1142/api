@@ -298,16 +298,17 @@ def get_info():
 #                  search user                  #
 #                                               #
 #################################################
-@app.route("/seach_user", methods=['POST'])
+@app.route("/search_user", methods=['POST'])
 def search_user():
     try:
         ret = {}
-        ret = {"error": 0}
         text = request.form['email']
         mdb.search_user(text)
+        ret['msg'] = 'Search Successfully!'
+        ret['err'] = 0
         return "%s" % mdb.search_user(text)
     except Exception as exp:
-        print "todo_done() :: Got exception: %s" % exp
+        print "search_user() :: Got exception: %s" % exp
         print(traceback.format_exc())
     return json.dumps(ret)
 
@@ -318,9 +319,10 @@ def search_user():
 #                                               #
 #################################################
 @app.route("/forgot", methods=['POST'])
-def search_user():
+def forgot():
     try:
         ret = {}
+        ret = {"error": 0}
         email = request.form['email']
         question = request.form['question']
         answer = request.form['answer']
@@ -341,9 +343,10 @@ def search_user():
                     return 'Answer is wrong!'
             else:
                 return 'Question is wrong!'
-
+        ret['msg'] = 'Search Successfully!'
+        ret['err'] = 0
     except Exception as exp:
-        print "todo_done() :: Got exception: %s" % exp
+        print "forgot() :: Got exception: %s" % exp
         print(traceback.format_exc())
     return json.dumps(ret)
 
@@ -364,7 +367,7 @@ def add_todo():
         mdb.add_todo(title, description, date, done)
         ret["msg"] = "todo added sucessfully"
     except Exception as exp:
-        print "todo_done() :: Got exception: %s" % exp
+        print "add_todo() :: Got exception: %s" % exp
         print(traceback.format_exc())
     return json.dumps(ret)
 
@@ -374,9 +377,9 @@ def add_todo():
 #               get_all_todos                   #
 #                                               #
 #################################################
-@app.route("/get_all_todo", methods=['GET'])
-def get_all_todo():
-    return mdb.get_all_todo()
+@app.route("/get_all_user", methods=['GET'])
+def get_all_user():
+    return mdb.get_all_user()
 
 
 #################################################
@@ -384,15 +387,15 @@ def get_all_todo():
 #                delete_todos                   #
 #                                               #
 #################################################
-@app.route("/delete_todo", methods=['POST'])
-def delete_todo():
+@app.route("/delete_user", methods=['POST'])
+def delete_user():
     try:
-        title = request.form['title']
-        mdb.delete_todo(title)
+        title = request.form['email']
+        mdb.delete_user(title)
     except Exception as exp:
-        print "delete_done() :: Got exception: %s" % exp
+        print "delete_user() :: Got exception: %s" % exp
         print(traceback.format_exc())
-    return "%s" % mdb.delete_todo(title)
+    return "%s" % mdb.delete_user(title)
 
 
 #################################################

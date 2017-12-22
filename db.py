@@ -207,15 +207,15 @@ class Mdb:
 #                get_all_todo                   #
 #                                               #
 #################################################
-    def get_all_todo(self):
-        collection = self.db["todo"]
+    def get_all_user(self):
+        collection = self.db["user"]
         result = collection.find({})
 
         ret = []
         for data in result:
             print "<<=====got the data====>> :: %s" % data
             ret.append(data)
-        return JSONEncoder().encode({'todo': ret})
+        return JSONEncoder().encode({'user': ret})
 
 
 #################################################
