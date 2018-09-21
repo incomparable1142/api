@@ -45,7 +45,6 @@ python-dateutil==2.6.1
 python-mimeparse==1.6.0
 pytz==2017.2
 requests==2.18.1
-setupfiles==0.0.50
 simplejson==3.11.1
 six==1.10.0
 SQLAlchemy==1.1.11
