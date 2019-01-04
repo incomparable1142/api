@@ -19,6 +19,19 @@ class Mdb:
         client = MongoClient(conn_str)
         self.db = client[DB_NAME]
 
+#############################################
+#                                           #
+#                GET LAST ID                #
+#                                           #
+#############################################
+    def get_last_id(self):
+        data = self.db.user.find({}).count() > 0
+        if data == True:
+            last_id = self.db.user.find({}).sort({"_id": -1}).limit(1)
+        else:
+            last_id = 0
+        return last_id
+
 #################################################
 #                                               #
 #                    ADD_USER                   #
@@ -88,8 +101,8 @@ class Mdb:
 #            USER SESSION IN DATABASE       #
 #                                           #
 #############################################
-    def save_login_info(self, user_email, mac, ip, user_agent, type):
-        LOGIN_TYPE = 'User Login'
+    def save_login_info(self, user_email, mac, ip, user_agent, LOGIN_TYPE):
+        # LOGIN_TYPE = 'User Login'
         try:
             ts = datetime.datetime.today().strftime("%a %b %d %X  %Y ")
             rec = {
@@ -97,7 +110,7 @@ class Mdb:
                 'mac': mac,
                 'ip': ip,
                 'user_agent': user_agent,
-                'user_type': type,
+                'user_type': LOGIN_TYPE,
                 'timestamp': ts
             }
             self.db.user_session.insert(rec)
@@ -145,10 +158,11 @@ class Mdb:
                     {'email': {'$regex': text, '$options': 'i'}}
                  ]
         })
-        ret = []
+        # ret = []
         for user in result:
-            ret.append(user)
-        return ret
+            return user
+            # ret.append(user)
+        # return ret
 
     # db.survey.find( { $or:[ {"title": "Help Survey"} ] } )
 
@@ -186,14 +200,15 @@ class Mdb:
 #                    ADD_TODO                   #
 #                                               #
 #################################################
-    def add_todo(self, title, description, date, done):
+    def add_todo(self, title, description, date, status, email):
         try:
             ts = datetime.datetime.today().strftime("%a %b %d %X  %Y ")
             rec = {
                 'title': title,
                 'description': description,
                 'date': date,
-                'done': done,
+                'status': status,
+                'email': email,
                 'creation_date': ts
             }
             self.db.todo.insert(rec)
@@ -213,74 +228,66 @@ class Mdb:
 
         ret = []
         for data in result:
-            print "<<=====got the data====>> :: %s" % data
-            ret.append(data)
-        return JSONEncoder().encode({'user': ret})
-
-
-#################################################
-#                                               #
-#                delete_todos                   #
-#                                               #
-#################################################
-    def delete_user(self, title):
-        ret = []
-        collection = self.db["user"]
-        collection.remove({"email": title})
-        result = collection.find({})
-        if not result:
-            print "invalid user"
-            return "invalid user"
-
-        for data in result:
-            print "<<=====got the data====>> :: %s" % data
             ret.append(data)
         return JSONEncoder().encode({'users': ret})
 
+#################################################
+#                                               #
+#                 Delete user                   #
+#                                               #
+#################################################
+    def delete_user(self, email):
+        ret = []
+        collection = self.db["user"]
+        collection.remove({"email": email})
+        todo_collection = self.db["todo"]
+        todo_collection.remove({"email":email})
+        result = collection.find({})
+        for data in result:
+            ret.append(data)
+        return JSONEncoder().encode({'users': ret})
 
 #################################################
 #                                               #
 #            get_all_pending_todo               #
 #                                               #
 #################################################
-    def get_all_pending(self):
+    def get_all_pending(self, email):
         ret = []
         collection = self.db["todo"]
-        result = collection.find({"done": "0"})
-        if not result:
-            not_done = collection.find()
-            for data in not_done:
-                print "<<=====got the data====>> :: %s" % data
-                ret.append(data)
-            return JSONEncoder().encode({'todo': ret})
+        result = collection.find({"status": "0", "email": email})
+        # if not result:
+        #     not_done = collection.find()
+        #     for data in not_done:
+        #         print "<<=====got the data====>> :: %s" % data
+        #         ret.append(data)
+        #     return JSONEncoder().encode({'todo': ret})
 
         for data in result:
-            print "<<=====got the data====>> :: %s" % data
             ret.append(data)
         return JSONEncoder().encode({'todo': ret})
-
 
 #################################################
 #                                               #
 #             get_all_done_todo                 #
 #                                               #
 #################################################
-    def get_all_done(self):
+    def get_all_complete(self, email):
         ret = []
         collection = self.db["todo"]
-        result = collection.find({"done": "1"})
-        if not result:
-            not_done = collection.find()
-            for data in not_done:
-                print "<<=====got the data====>> :: %s" % data
-                ret.append(data)
-            return JSONEncoder().encode({'todo': ret})
+        result = collection.find({"status": "1", "email": email})
+        # if not result:
+        #     not_done = collection.find()
+        #     for data in not_done:
+        #         print "<<=====got the data====>> :: %s" % data
+        #         ret.append(data)
+        #     return JSONEncoder().encode({'todo': ret})
 
         for data in result:
-            print "<<=====got the data====>> :: %s" % data
             ret.append(data)
         return JSONEncoder().encode({'todo': ret})
 
 
 if __name__ == "__main__":
     mdb = Mdb()
+

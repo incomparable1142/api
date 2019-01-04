@@ -1,6 +1,5 @@
 from flask import Flask, request,  jsonify, session, redirect
-from flask_login import LoginManager, UserMixin, login_user, login_required,\
-                        logout_user, current_user
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 import uuid
 from uuid import getnode as get_mac
 from flask.ext.bcrypt import Bcrypt
@@ -15,31 +14,12 @@ import json
 import jwt
 import os
 from db import Mdb
-# from werkzeug.utils import secure_filename
-# from wtforms.fields import SelectField
-# from utils import log
-
+from config import EXPIRE_TOKEN_LIMIT
 app = Flask(__name__)
 bcrypt = Bcrypt(app)
 mdb = Mdb()
 
-
-##############################################################################
-#                                                                            #
-#                                                                            #
-#                                    SESSION                                 #
-#                                                                            #
-#                                                                            #
-##############################################################################
-@app.before_request
-def before_request():
-    flask.session.permanent = True
-    app.permanent_session_lifetime = datetime.timedelta(minutes=15)
-    flask.session.modified = True
-    flask.g.user = flask_login.current_user
-    # print'session in working'
-
-
+# https://www.tecmint.com/install-mongodb-on-ubuntu-18-04/
 app.config['secretkey'] = 'some-strong+secret#key'
 app.secret_key = 'F12Zr47j\3yX R~X@H!jmM]Lwf/,?KT'
 
@@ -62,28 +42,6 @@ class JSONEncoder(json.JSONEncoder):
         return json.JSONEncoder.default(self, o)
 
 
-#############################################
-#                                           #
-#                SESSION COUNTER            #
-#                                           #
-#############################################
-def sumSessionCounter():
-    try:
-        session['counter'] += 1
-    except KeyError:
-        session['counter'] = 1
-
-
-##############################################
-#                                            #
-#               LOGIN MANAGER                #
-#                                            #
-##############################################
-@login_manager.unauthorized_handler
-def unauthorized_callback():
-    return redirect('/')
-
-
 ##############################################
 #                                            #
 #               GET MAC ADDRESS              #
@@ -95,34 +53,6 @@ def get_mac():
     return mac
 
 
-#############################################
-#                                           #
-#              TOKEN REQUIRED               #
-#                                           #
-#############################################
-app.config['secretkey'] = 'some-strong+secret#key'
-
-
-def token_required(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        token = request.args.get('token')
-
-        # ensure that token is specified in the request
-        if not token:
-            return jsonify({'message': 'Missing token!'})
-
-        # ensure that token is valid
-        try:
-            data = jwt.decode(token, app.config['secretkey'])
-        except:
-            return jsonify({'message': 'Invalid token!'})
-
-        return f(*args, **kwargs)
-
-    return decorated
-
-
 ##############################################
 #                                            #
 #               WHO AM I ROUTE               #
@@ -132,14 +62,16 @@ def token_required(f):
 def whoami():
     ret = {}
     try:
-        sumSessionCounter()
-        ret['User'] = (" hii i am %s !!" % session['name'])
+        ret['Message'] = (" Hello, i am %s !!" % session['name'])
         email = session['email']
         ret['Session'] = email
-        ret['User_Id'] = mdb.get_user_id_by_session(email)
+        ret['Status codes'] = 200
+        # ret['User_Id'] = mdb.get_user_id_by_session(email)
     except Exception as exp:
-        ret['error'] = 1
-        ret['user'] = 'user is not login'
+        print(traceback.format_exc())
+        print('get_info() :: Got exception: %s' % exp)
+        ret['Error'] = 'User is not login'
+        ret['Status codes'] = 400
     return JSONEncoder().encode(ret)
 
 
@@ -165,19 +97,20 @@ def add_user():
 
         check = mdb.check_email(email)
         if check:
-            ret['error'] = 1
-            ret['user'] = 'This Email Already Used'
-            return JSONEncoder().encode(ret)
+            ret['Status codes'] = 400
+            ret['Error'] = 'This Email Already Used !!'
 
         else:
             mdb.add_user(name, email, pw_hash, contact, question, answer)
-            ret['error'] = 0
-            ret['user'] = (" user add successfully !!")
-            return JSONEncoder().encode(ret)
+            ret['Status codes'] = 200
+            ret['Message'] = " User added successfully !!"
 
     except Exception as exp:
         print('add_user() :: Got exception: %s' % exp)
         print(traceback.format_exc())
+        ret['Status codes'] = 404
+        ret['Error'] = 'Some thing went wrong !!'
+    return JSONEncoder().encode(ret)
 
 
 #############################################
@@ -189,16 +122,13 @@ def add_user():
 def login():
     ret = {}
     try:
-        sumSessionCounter()
         email = request.form['email']
         password = request.form['password']
 
-
         if mdb.user_exists(email):
             pw_hash = mdb.get_password(email)
-            print 'password in server, get from db class', pw_hash
+            print('password in server, get from db class', pw_hash)
             passw = bcrypt.check_password_hash(pw_hash, password)
-
 
             if passw == True:
                 name = mdb.get_name(email)
@@ -206,39 +136,37 @@ def login():
                 session['email'] = email
 
                 # Login Successful!
-                expiry = datetime.datetime.utcnow() + datetime.\
-                    timedelta(minutes=15)
+                expiry = datetime.datetime.utcnow() + datetime.timedelta(minutes=EXPIRE_TOKEN_LIMIT)
 
                 token = jwt.encode({'user': email, 'exp': expiry},
                                    app.config['secretkey'], algorithm='HS256')
-                ret['msg'] = 'Login successful'
-                ret['err'] = 0
-                ret['token'] = token.decode('UTF-8')
+
+                LOGIN_TYPE = 'User Login'
+                email = session['email']
+                user_email = email
+                mac = get_mac()
+                ip = request.remote_addr
+                agent = request.headers.get('User-Agent')
+                mdb.save_login_info(user_email, mac, ip, agent, LOGIN_TYPE)
+
+                ret['Message'] = 'Login successful'
+                ret['Status codes'] = 200
+                ret['Token'] = token.decode('UTF-8')
 
             else:
-                ret['msg'] = 'Password is wrong!'
-                ret['err'] = 1
-                return JSONEncoder().encode(ret)
-
+                ret['Error'] = 'Password is wrong!'
+                ret['Status codes'] = 403
         else:
             # Login Failed!
-            ret['msg'] = 'Email Id is incorrect'
-            ret['err'] = 1
-            return JSONEncoder().encode(ret)
-
-        LOGIN_TYPE = 'User Login'
-        email = session['email']
-        user_email = email
-        mac = get_mac()
-        ip = request.remote_addr
-
-        agent = request.headers.get('User-Agent')
-        mdb.save_login_info(user_email, mac, ip, agent, LOGIN_TYPE)
+            ret['Error'] = 'Email Id is incorrect'
+            ret['Status codes'] = 400
+        return JSONEncoder().encode(ret)
 
     except Exception as exp:
-        ret['msg'] = '%s' % exp
-        ret['err'] = 0
         print(traceback.format_exc())
+        print('login() :: Got exception: %s' % exp)
+        ret['Status codes'] = 404
+        ret['Error'] = 'Some thing went wrong !!'
     # return jsonify(ret)
     return JSONEncoder().encode(ret)
 
@@ -250,22 +178,23 @@ def login():
 #############################################
 @app.route('/logout')
 def clearsession():
+    ret = {}
     try:
-        ret = {}
         LOGIN_TYPE = 'User Logout'
-        sumSessionCounter()
         email = session['email']
-        user_email = email
         mac = get_mac()
         ip = request.remote_addr
         agent = request.headers.get('User-Agent')
-        mdb.save_login_info(user_email, mac, ip, agent, LOGIN_TYPE)
+        mdb.save_login_info(email, mac, ip, agent, LOGIN_TYPE)
         session.clear()
-        ret['msg'] = 'Logout Successfully!'
-        ret['err'] = 0
-        return JSONEncoder().encode(ret)
+        ret['Message'] = 'Logout Successfully!'
+        ret['Status codes'] = 200
     except Exception as exp:
-        return 'clearsession() :: Got Exception: %s' % exp
+        print(traceback.format_exc())
+        print('clearsession() :: Got exception: %s' % exp)
+        ret['Error'] = 'User Already Logout!'
+        ret['Status codes'] = 400
+    return JSONEncoder().encode(ret)
 
 
 #############################################
@@ -275,22 +204,22 @@ def clearsession():
 #############################################
 @app.route('/get_info')
 def get_info():
+    ret = {}
     try:
-        LOGIN_TYPE = 'User Login'
-        sumSessionCounter()
         email = session['email']
-        user_email = email
-        ip = request.remote_addr
-        agent = request.headers.get('User-Agent')
-
-        mdb.save_login_info(user_email, ip, agent, LOGIN_TYPE)
-        return 'User_email: %s, IP: %s, ' \
-               'User-Agent: %s' % (user_email, ip, agent, LOGIN_TYPE)
+        ret['LOGIN_TYPE'] = 'User Login'
+        ret['Email'] = email
+        ret['IP'] = request.remote_addr
+        ret['Agent'] = request.headers.get('User-Agent')
+        ret['MAC Address '] = get_mac()
+        ret['Message'] = 'Success!'
+        ret['Status codes'] = 200
     except Exception as exp:
         print('get_info() :: Got exception: %s' % exp)
         print(traceback.format_exc())
-        return ('get_info() :: Got exception: %s is '
-                'not found Please Login first' % exp)
+        ret['Error'] = 'User not found Please Login first'
+        ret['Status codes'] = 400
+    return JSONEncoder().encode(ret)
 
 
 #################################################
@@ -300,17 +229,26 @@ def get_info():
 #################################################
 @app.route("/search_user", methods=['POST'])
 def search_user():
+    ret = {}
     try:
-        ret = {}
         text = request.form['email']
-        mdb.search_user(text)
-        ret['msg'] = 'Search Successfully!'
-        ret['err'] = 0
-        return "%s" % mdb.search_user(text)
+        data = mdb.search_user(text)
+        ret['User Id'] = data['_id']
+        ret['Email'] = data['email']
+        ret['Name'] = data['name']
+        ret['Password'] = data['password']
+        ret['Contact'] = data['contact']
+        ret['Question'] = data['question']
+        ret['Answer'] = data['answer']
+        ret['Creation Date'] = data['creation_date']
+        ret['Message'] = 'Search Successfully!'
+        ret['Status codes'] = 200
     except Exception as exp:
-        print "search_user() :: Got exception: %s" % exp
+        print("search_user() :: Got exception: %s" % exp)
         print(traceback.format_exc())
-    return json.dumps(ret)
+        ret['Error'] = 'Some thing went wrong !!'
+        ret['Status codes'] = 400
+    return JSONEncoder().encode(ret)
 
 
 #################################################
@@ -320,9 +258,9 @@ def search_user():
 #################################################
 @app.route("/forgot", methods=['POST'])
 def forgot():
+    ret = {}
     try:
-        ret = {}
-        ret = {"error": 0}
+        ret['Status codes'] = 404
         email = request.form['email']
         question = request.form['question']
         answer = request.form['answer']
@@ -333,43 +271,27 @@ def forgot():
         passw = bcrypt.check_password_hash(pw_hash, password)
 
         if mdb.user_exists(email):
-            ques = mdb.get.security_question(email)
+            ques = mdb.get_security_question(email)
             if question == ques:
                 ans = mdb.get_security_answer(email)
                 if answer == ans:
                     mdb.set_password(email, pw_hash)
-                    return 'Done!'
+                    ret['Message'] = 'Changed password successfully!'
+                    ret['Status codes'] = 200
                 else:
-                    return 'Answer is wrong!'
+                    ret['Error'] = "Your answer is wrong please try again.."
             else:
-                return 'Question is wrong!'
-        ret['msg'] = 'Search Successfully!'
-        ret['err'] = 0
-    except Exception as exp:
-        print "forgot() :: Got exception: %s" % exp
-        print(traceback.format_exc())
-    return json.dumps(ret)
+                ret['Error'] = "This question doesn't exists in our database.."
+        else:
+            ret['Error'] = "This email doesn't exists in our database.."
 
-
-#################################################
-#                                               #
-#                    ADD_TODO                   #
-#                                               #
-#################################################
-@app.route("/add_todo", methods=['POST'])
-def add_todo():
-    try:
-        ret = {"error": 0}
-        title = request.form['title']
-        description = request.form['description']
-        date = request.form['date']
-        done = request.form['done']
-        mdb.add_todo(title, description, date, done)
-        ret["msg"] = "todo added sucessfully"
     except Exception as exp:
-        print "add_todo() :: Got exception: %s" % exp
+        print("forgot() :: Got exception: %s" % exp)
         print(traceback.format_exc())
-    return json.dumps(ret)
+        ret['Error'] = 'Some thing went wrong !!'
+        ret['Status codes'] = 400
+    # return json.dumps(ret)
+    return JSONEncoder().encode(ret)
 
 
 #################################################
@@ -390,12 +312,39 @@ def get_all_user():
 @app.route("/delete_user", methods=['POST'])
 def delete_user():
     try:
-        title = request.form['email']
-        mdb.delete_user(title)
+        email = request.form['email']
+        mdb.delete_user(email)
     except Exception as exp:
-        print "delete_user() :: Got exception: %s" % exp
+        print("delete_user() :: Got exception: %s" % exp)
         print(traceback.format_exc())
-    return "%s" % mdb.delete_user(title)
+    return "%s" % mdb.delete_user(email)
+
+
+#################################################
+#                                               #
+#                    ADD_TODO                   #
+#                                               #
+#################################################
+@app.route("/add_todo", methods=['POST'])
+def add_todo():
+    ret = {}
+    try:
+        email = session['email']
+        if email:
+            title = request.form['title']
+            description = request.form['description']
+            date = request.form['date']
+            status = request.form['status']
+            mdb.add_todo(title, description, date, status, email)
+
+            ret['Status codes'] = 200
+            ret['Message'] = "Todo added sucessfully !!"
+    except Exception as exp:
+        print("add_todo() :: Got exception: %s" % exp)
+        print(traceback.format_exc())
+        ret['Error'] = 'Some went wrong. please Login first'
+        ret['Status codes'] = 400
+    return json.dumps(ret)
 
 
 #################################################
@@ -406,11 +355,12 @@ def delete_user():
 @app.route("/get_all_pending", methods=['GET'])
 def get_all_pending():
     try:
-        mdb.get_all_pending()
+        email = session['email']
+        mdb.get_all_pending(email)
     except Exception as exp:
-        print "get_done() :: Got exception: %s" % exp
+        print("get_done() :: Got exception: %s" % exp)
         print(traceback.format_exc())
-    return "%s" % mdb.get_all_pending()
+    return "%s" % mdb.get_all_pending(session['email'])
 
 
 #################################################
@@ -418,14 +368,15 @@ def get_all_pending():
 #             get_all_done_todo                 #
 #                                               #
 #################################################
-@app.route("/get_all_done", methods=['GET'])
+@app.route("/get_all_complete", methods=['GET'])
 def get_all_done():
     try:
-        mdb.get_all_done()
+        email = session['email']
+        mdb.get_all_complete(email)
     except Exception as exp:
-        print "get_done() :: Got exception: %s" % exp
+        print("get_done() :: Got exception: %s" % exp)
         print(traceback.format_exc())
-    return "%s" % mdb.get_all_done()
+    return "%s" % mdb.get_all_complete(email)
 
 
 #################################################
@@ -433,9 +384,7 @@ def get_all_done():
 #             Main Server                       #
 #                                               #
 #################################################
-# if __name__ == '__main__':
-#     app.run(debug=True)
-#
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='127.0.0.1', port=port, debug=True, threaded=True)
+
